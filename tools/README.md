@@ -187,5 +187,5 @@ All tools are designed to work independently and have minimal dependencies:
 - Check that all dependencies are installed
 
 **API Key Errors (in generation tests):**
-- Set `GROQ_API_KEY` environment variable
+- Set `GEMINI_API_KEY` environment variable
 - Generation tests will show warnings but continue without API key

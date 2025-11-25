@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum as SQLAlchemyEnum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum as SQLAlchemyEnum, JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
@@ -18,6 +18,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
+    full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     # Add the role column, with a default value of 'user'
@@ -25,6 +26,7 @@ class User(Base):
 
     # This creates a one-to-one relationship with the Subscription model.
     subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    exam_attempts = relationship("ExamAttempt", back_populates="user", cascade="all, delete-orphan")
 
 class Subscription(Base):
     """
@@ -40,4 +42,21 @@ class Subscription(Base):
     expires_at = Column(DateTime, nullable=True)
     
     user = relationship("User", back_populates="subscription")
+
+class ExamAttempt(Base):
+    """
+    Stores historical exam submissions for users.
+    """
+    __tablename__ = "exam_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    exam_name = Column(String, nullable=False)
+    stream = Column(String, nullable=True)
+    year = Column(Integer, nullable=True)
+    score = Column(Integer, nullable=True)
+    submitted_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    exam_data = Column(JSON, nullable=False)
+
+    user = relationship("User", back_populates="exam_attempts")
 

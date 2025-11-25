@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from . import models, schema, security
 import datetime
+from typing import List
 
 # --- User CRUD Functions ---
 
@@ -26,7 +27,8 @@ def create_user(db: Session, user: schema.UserCreate, role: models.UserRole = mo
     
     # Create a new SQLAlchemy User model instance, now including the role
     db_user = models.User(
-        email=user.email, 
+        email=user.email,
+        full_name=user.full_name,
         hashed_password=hashed_password,
         role=role
     )
@@ -35,6 +37,32 @@ def create_user(db: Session, user: schema.UserCreate, role: models.UserRole = mo
     db.commit()
     db.refresh(db_user)
     return db_user
+
+# --- Exam Attempt CRUD Functions ---
+
+def create_exam_attempt(db: Session, user: models.User, submission: schema.ExamSubmissionRequest) -> models.ExamAttempt:
+    attempt = models.ExamAttempt(
+        user_id=user.id,
+        exam_name=submission.exam_name,
+        stream=submission.stream,
+        year=submission.year,
+        score=submission.score,
+        exam_data=submission.exam_data,
+        submitted_at=datetime.datetime.utcnow()
+    )
+    db.add(attempt)
+    db.commit()
+    db.refresh(attempt)
+    return attempt
+
+def get_exam_attempts(db: Session, user: models.User, limit: int = 20) -> List[models.ExamAttempt]:
+    return (
+        db.query(models.ExamAttempt)
+        .filter(models.ExamAttempt.user_id == user.id)
+        .order_by(models.ExamAttempt.submitted_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 # --- Subscription CRUD Functions ---
 

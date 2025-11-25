@@ -29,6 +29,7 @@ def seed_database():
             print("Creating standard user...")
             user_in = schema.UserCreate(
                 email="user@example.com",
+                full_name="Demo User",
                 password="password"
             )
             crud.create_user(db=db, user=user_in, role=models.UserRole.USER)
@@ -42,6 +43,7 @@ def seed_database():
             print("Creating admin user...")
             admin_in = schema.UserCreate(
                 email="admin@example.com",
+                full_name="Demo Admin",
                 password="adminpassword"
             )
             crud.create_user(db=db, user=admin_in, role=models.UserRole.ADMIN)

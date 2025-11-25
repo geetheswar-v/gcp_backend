@@ -38,7 +38,11 @@ The application requires a PostgreSQL database to store user accounts.
 
 Connect to PostgreSQL as a superuser (e.g., postgres or your main user account):
 
-```psql -U your_superuser_name -d postgres```
+```/Users/vaibhav.yadav/pgsql/bin/pg_ctl -D /Users/vaibhav.yadav/pgsql/data start```
+
+Verify it's running 
+
+```/Users/vaibhav.yadav/pgsql/bin/pg_isready```
 
 Create a dedicated database for the application:
 
@@ -64,8 +68,10 @@ Add the following configuration details to the .env file, replacing the placehol
 # A long, random string for JWT security. Generate one with: openssl rand -hex 32
 SECRET_KEY="your_super_long_random_secret_string_here"
 
-# Your Groq API key for the AI question generation
-GROQ_API_KEY="your_groq_api_key_here"
+# Your Gemini API key for AI question generation
+GEMINI_API_KEY="your_gemini_api_key_here"
+# Optional: override the default Gemini model (defaults to gemini-1.5-flash)
+# GEMINI_MODEL="gemini-1.5-flash"
 
 # Your PostgreSQL database credentials from Step 3
 DB_USER="my_app_user"
@@ -115,6 +121,15 @@ Open your web browser and navigate to the interactive API documentation: http://
 
 Register a new user or use the demo accounts at the /token endpoint to log in.
 
+Sample registration payload:
+```json
+{
+  "email": "student@example.com",
+  "full_name": "Student Name",
+  "password": "securePassword123"
+}
+```
+
 User: user@example.com / password
 
 Admin: admin@example.com / adminpassword
@@ -124,6 +139,22 @@ Copy the access_token you receive after logging in.
 Click the "Authorize" button at the top right, paste your token in the format Bearer <your_token>, and authorize.
 
 You can now use the protected /generate-exam endpoint to get your first AI-generated mock test!
+
+### Submit Completed Exams
+- `POST /submit-exam`: store a completed attempt for the logged-in user.
+  ```json
+  {
+    "exam_name": "GATE",
+    "stream": "CS",
+    "year": 2025,
+    "score": 58,
+    "exam_data": {
+      "responses": [...],
+      "metadata": {...}
+    }
+  }
+  ```
+- `GET /exam-history`: retrieve the most recent submissions (optional `limit` query parameter, default 20).
 
 ## Supported Exam Types
 

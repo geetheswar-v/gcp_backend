@@ -1,13 +1,15 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-import asyncio
+from sqlalchemy import text
 
 # Import all the necessary modules from your application structure
 from . import crud, models, schema, security, payments, database
 from .rag_service import RAGService
-
 # Create the database tables if they don't exist
 try:
+    with database.engine.connect() as connection:
+        connection.execute(text("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS full_name VARCHAR"))
+        connection.commit()
     models.Base.metadata.create_all(bind=database.engine)
     print("Database tables checked/created successfully.")
 except Exception as e:
@@ -47,9 +49,14 @@ def login_for_access_token(form_data: schema.OAuth2PasswordRequestForm = Depends
         )
     
     access_token = security.create_access_token(
-        data={"sub": user.email, "user_id": user.id, "role": user.role.value}
+        data={
+            "sub": user.email,
+            "user_id": user.id,
+            "role": user.role.value,
+            "name": user.full_name,
+        }
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "user_name": user.full_name}
 
 # --- Information Endpoints ---
 
@@ -130,6 +137,26 @@ async def generate_new_exam(
     except Exception as e:
         print(f"An error occurred during exam generation: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred while generating the exam.")
+
+# --- Exam Submission Endpoints ---
+
+@app.post("/submit-exam", response_model=schema.ExamAttemptResponse, tags=["Exam Submission"])
+def submit_exam(
+    submission: schema.ExamSubmissionRequest,
+    current_user: models.User = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    attempt = crud.create_exam_attempt(db, current_user, submission)
+    return attempt
+
+@app.get("/exam-history", response_model=list[schema.ExamAttemptResponse], tags=["Exam Submission"])
+def get_exam_history(
+    current_user: models.User = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db),
+    limit: int = 20
+):
+    attempts = crud.get_exam_attempts(db, current_user, limit=limit)
+    return attempts
 
 # --- Admin-Only Endpoint for Demo ---
 

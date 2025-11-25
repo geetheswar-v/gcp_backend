@@ -1,0 +1,216 @@
+{
+  "exam_details": {
+    "name": "CAT",
+    "stream": "string",
+    "year": 0
+  },
+  "VARC": [],
+  "DILR": [],
+  "QA": [],
+  "errors": [
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - varc tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - dilr tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant mcq"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    },
+    {
+      "error": "No seed questions found for CAT string  - quant tita"
+    }
+  ]
+}

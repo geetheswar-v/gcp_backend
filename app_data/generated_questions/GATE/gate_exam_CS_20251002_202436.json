@@ -8,10 +8,10 @@
   "TECH": [],
   "errors": [
     {
-      "error": "Groq API Key not found. Please set the GROQ_API_KEY environment variable."
+      "error": "Gemini API Key not found. Please set the GEMINI_API_KEY environment variable."
     },
     {
-      "error": "Groq API Key not found. Please set the GROQ_API_KEY environment variable."
+      "error": "Gemini API Key not found. Please set the GEMINI_API_KEY environment variable."
     },
     {
       "error": "No seed questions found for GATE CS 2025 - technical mcq"

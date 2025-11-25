@@ -4,7 +4,7 @@ import json
 import os
 import random
 import asyncio
-import aiohttp
+import google.generativeai as genai
 from datetime import datetime
 
 # --- Configuration ---
@@ -85,6 +85,10 @@ class RAGService:
 
         self.source_questions = self._load_source_questions()
 
+        # Gemini model attributes (lazy initialization)
+        self._gemini_model = None
+        self._gemini_model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+
         # Diagnostic summary to check loaded data
         print("\n--- Source Data Summary ---")
         for section, questions in self.source_questions.items():
@@ -156,8 +160,54 @@ class RAGService:
 
         return random.choice(filtered) if filtered else None
 
-    async def _generate_single_question(self, session, section, q_type, exam_name, stream, year):
-        """Generates one new question using the RAG pipeline with Groq API."""
+    def _ensure_gemini_model(self):
+        """
+        Lazily instantiate and configure the Gemini model.
+        Returns the model instance or None if configuration failed.
+        """
+        if getattr(self, "_gemini_model", None):
+            return self._gemini_model
+
+        gemini_api_key = os.environ.get("GEMINI_API_KEY")
+        if not gemini_api_key:
+            print("Warning: GEMINI_API_KEY not set. Gemini generation is unavailable.")
+            return None
+
+        model_name = os.environ.get("GEMINI_MODEL", self._gemini_model_name)
+        try:
+            genai.configure(api_key=gemini_api_key)
+            self._gemini_model = genai.GenerativeModel(model_name)
+            self._gemini_model_name = model_name
+            return self._gemini_model
+        except Exception as exc:
+            print(f"Error initializing Gemini model '{model_name}': {exc}")
+            return None
+
+    @staticmethod
+    def _extract_gemini_text(response):
+        """
+        Extract the textual payload from a Gemini response object.
+        """
+        if not response:
+            return ""
+
+        if getattr(response, "text", None):
+            return response.text
+
+        parts = []
+        for candidate in getattr(response, "candidates", []):
+            content = getattr(candidate, "content", None)
+            if not content:
+                continue
+            for part in getattr(content, "parts", []):
+                text = getattr(part, "text", "")
+                if text:
+                    parts.append(text)
+
+        return "\n".join(parts).strip()
+
+    async def _generate_single_question(self, section, q_type, exam_name, stream, year):
+        """Generates one new question using the RAG pipeline with Gemini API."""
         seed_question = self._find_seed_question(section, q_type, exam_name, stream, year)
         if not seed_question:
             return {"error": f"No seed questions found for {exam_name} {stream or ''} {year or ''} - {section} {q_type}"}
@@ -183,38 +233,35 @@ class RAGService:
             context_questions = retrieved_results['documents'][0]
             prompt = self._create_llm_prompt(section, q_type, context_questions)
             
-            GROQ_API_KEY = os.environ.get("GROQ_API_KEY") 
-            if not GROQ_API_KEY:
-                return {"error": "Groq API Key not found. Please set the GROQ_API_KEY environment variable."}
+            gemini_model = self._ensure_gemini_model()
+            if not gemini_model:
+                return {"error": "Gemini API Key not found. Please set the GEMINI_API_KEY environment variable."}
 
-            api_url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "messages": [{"role": "user", "content": prompt}],
-                "model": "llama-3.1-8b-instant",
+            generation_config = {
                 "temperature": 0.7,
-                "max_tokens": 4096,
-                "response_format": {"type": "json_object"}
+                "max_output_tokens": 4096,
+                "response_mime_type": "application/json"
             }
-            
-            async with session.post(api_url, json=payload, headers=headers, timeout=120) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    llm_text = result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
-                    
-                    try:
-                        generated_q = json.loads(llm_text)
-                        generated_q['section'] = SECTION_FILENAME_MAP.get(section, section.upper())
-                        generated_q['type'] = q_type.upper()
-                        return generated_q
-                    except json.JSONDecodeError:
-                        return {"error": "Failed to parse LLM JSON response", "raw_response": llm_text}
-                else:
-                    error_text = await response.text()
-                    return {"error": f"LLM API Error: {response.status}", "details": error_text[:200]}
+
+            def _invoke_gemini():
+                return gemini_model.generate_content(
+                    prompt,
+                    generation_config=generation_config
+                )
+
+            try:
+                response = await asyncio.to_thread(_invoke_gemini)
+            except Exception as exc:
+                return {"error": f"Gemini API Error: {exc}"}
+            llm_text = self._extract_gemini_text(response) or "{}"
+
+            try:
+                generated_q = json.loads(llm_text)
+                generated_q['section'] = SECTION_FILENAME_MAP.get(section, section.upper())
+                generated_q['type'] = q_type.upper()
+                return generated_q
+            except json.JSONDecodeError:
+                return {"error": "Failed to parse LLM JSON response", "raw_response": llm_text}
 
         except ValueError as e:
             if "does not exist" in str(e):
@@ -278,35 +325,34 @@ class RAGService:
                 "GA": [], "TECH": [], "errors": []
             }
 
-        async with aiohttp.ClientSession() as session:
-            sections_to_process = list(exam_structure.keys())
+        sections_to_process = list(exam_structure.keys())
 
-            for i, section in enumerate(sections_to_process):
-                print(f"\n--- Generating section: {section.upper()} ---")
-                
-                tasks = []
-                structure = exam_structure[section]
-                
-                for q_type, count in structure.items():
-                    for _ in range(count):
-                        tasks.append(self._generate_single_question(session, section, q_type, exam_name, stream, year))
-                
-                generated_questions = await asyncio.gather(*tasks)
+        for i, section in enumerate(sections_to_process):
+            print(f"\n--- Generating section: {section.upper()} ---")
+            
+            tasks = []
+            structure = exam_structure[section]
+            
+            for q_type, count in structure.items():
+                for _ in range(count):
+                    tasks.append(self._generate_single_question(section, q_type, exam_name, stream, year))
+            
+            generated_questions = await asyncio.gather(*tasks)
 
-                for q in generated_questions:
-                    section_key = q.get('section')
-                    if section_key and section_key in full_exam:
-                        full_exam[section_key].append(q)
-                    elif "error" in q:
-                        full_exam["errors"].append(q)
-                    else:
-                        full_exam["errors"].append({"error": "Generated question has unknown section", "details": q})
+            for q in generated_questions:
+                section_key = q.get('section')
+                if section_key and section_key in full_exam:
+                    full_exam[section_key].append(q)
+                elif "error" in q:
+                    full_exam["errors"].append(q)
+                else:
+                    full_exam["errors"].append({"error": "Generated question has unknown section", "details": q})
 
-                print(f"--- Section {section.upper()} generation complete. ---")
+            print(f"--- Section {section.upper()} generation complete. ---")
 
-                if i < len(sections_to_process) - 1:
-                    print(f"Waiting for 60 seconds to avoid rate limiting...")
-                    await asyncio.sleep(60)
+            if i < len(sections_to_process) - 1:
+                print(f"Waiting for 60 seconds to avoid rate limiting...")
+                await asyncio.sleep(60)
         
         print("\nFull exam generation complete.")
         self._save_exam(full_exam)

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from fastapi.security import OAuth2PasswordRequestForm as FastAPIForm
+from datetime import datetime
 import enum
 
 # Define an Enum for user roles to match the database model
@@ -12,9 +13,11 @@ class UserRole(str, enum.Enum):
 class UserBase(BaseModel):
     """Base schema for a user, containing common attributes."""
     email: EmailStr
+    full_name: str | None = None
 
 class UserCreate(UserBase):
     """Schema used for creating a new user. Inherits from UserBase and adds a password."""
+    full_name: str
     password: str
 
 class User(UserBase):
@@ -37,12 +40,35 @@ class Token(BaseModel):
     """Schema for the response when a user successfully logs in."""
     access_token: str
     token_type: str
+    user_name: str | None = None
 
 class TokenData(BaseModel):
     """Schema for the data contained within a JWT token."""
     email: str | None = None
     user_id: int | None = None
     role: str | None = None
+    name: str | None = None
+
+# --- Exam Submission Schemas ---
+
+class ExamSubmissionRequest(BaseModel):
+    exam_name: str
+    stream: str | None = None
+    year: int | None = None
+    score: int | None = None
+    exam_data: dict
+
+class ExamAttemptResponse(BaseModel):
+    id: int
+    exam_name: str
+    stream: str | None
+    year: int | None
+    score: int | None
+    submitted_at: datetime | None
+    exam_data: dict
+
+    class Config:
+        from_attributes = True
 
 # --- Exam Generation Schemas ---
 class ExamGenerationRequest(BaseModel):
