@@ -5,11 +5,15 @@ import os
 import random
 import asyncio
 import google.generativeai as genai
+import requests
 from datetime import datetime
 
 # --- Configuration ---
-BASE_APP_DATA_PATH = '/Users/vaibhav.yadav/Documents/Course/OELP/app_data'
+BASE_APP_DATA_PATH = './app_data'
 MODEL_NAME = 'all-MiniLM-L6-v2'
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama") # 'gemini' or 'ollama'
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "granite4:3b-h")
 
 def get_exam_paths(exam_type):
     """Get paths for vector DB, questions, and generated exams based on exam type"""
@@ -87,7 +91,7 @@ class RAGService:
 
         # Gemini model attributes (lazy initialization)
         self._gemini_model = None
-        self._gemini_model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+        self._gemini_model_name = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
         # Diagnostic summary to check loaded data
         print("\n--- Source Data Summary ---")
@@ -233,29 +237,42 @@ class RAGService:
             context_questions = retrieved_results['documents'][0]
             prompt = self._create_llm_prompt(section, q_type, context_questions)
             
-            gemini_model = self._ensure_gemini_model()
-            if not gemini_model:
-                return {"error": "Gemini API Key not found. Please set the GEMINI_API_KEY environment variable."}
+            if LLM_PROVIDER == 'ollama':
+                try:
+                    response_text = await self._invoke_ollama(prompt)
+                    llm_text = response_text
+                except Exception as e:
+                    return {"error": f"Ollama API Error: {e}"}
+            else:
+                gemini_model = self._ensure_gemini_model()
+                if not gemini_model:
+                    return {"error": "Gemini API Key not found. Please set the GEMINI_API_KEY environment variable."}
 
-            generation_config = {
-                "temperature": 0.7,
-                "max_output_tokens": 4096,
-                "response_mime_type": "application/json"
-            }
+                generation_config = {
+                    "temperature": 0.7,
+                    "max_output_tokens": 4096,
+                    "response_mime_type": "application/json"
+                }
 
-            def _invoke_gemini():
-                return gemini_model.generate_content(
-                    prompt,
-                    generation_config=generation_config
-                )
+                def _invoke_gemini():
+                    return gemini_model.generate_content(
+                        prompt,
+                        generation_config=generation_config
+                    )
+
+                try:
+                    response = await asyncio.to_thread(_invoke_gemini)
+                    llm_text = self._extract_gemini_text(response) or "{}"
+                except Exception as exc:
+                    return {"error": f"Gemini API Error: {exc}"}
 
             try:
-                response = await asyncio.to_thread(_invoke_gemini)
-            except Exception as exc:
-                return {"error": f"Gemini API Error: {exc}"}
-            llm_text = self._extract_gemini_text(response) or "{}"
-
-            try:
+                # Clean up potential markdown code blocks from Ollama
+                if "```json" in llm_text:
+                    llm_text = llm_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in llm_text:
+                    llm_text = llm_text.split("```")[1].split("```")[0].strip()
+                
                 generated_q = json.loads(llm_text)
                 generated_q['section'] = SECTION_FILENAME_MAP.get(section, section.upper())
                 generated_q['type'] = q_type.upper()
@@ -269,6 +286,24 @@ class RAGService:
             return {"error": f"An exception occurred: {str(e)}"}
         except Exception as e:
             return {"error": f"An unexpected exception occurred: {str(e)}"}
+
+    async def _invoke_ollama(self, prompt):
+        """Invokes the Ollama API to generate content."""
+        url = f"{OLLAMA_BASE_URL}/api/generate"
+        payload = {
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json"
+        }
+        
+        def _post_request():
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+        response_json = await asyncio.to_thread(_post_request)
+        return response_json.get("response", "")
 
     def _create_llm_prompt(self, section, q_type, context_questions):
         """Constructs the prompt with instructions and context."""
@@ -294,11 +329,60 @@ class RAGService:
         """
         return prompt
 
+    def _generate_cache_key(self, exam_name: str, stream: str | None = None, year: int | None = None):
+        """Generate a cache key for exam lookup."""
+        key_parts = [exam_name.upper()]
+        if stream:
+            key_parts.append(stream.upper())
+        if year:
+            key_parts.append(str(year))
+        return "_".join(key_parts)
+
+    def _find_cached_exam(self, exam_name: str, stream: str | None = None, year: int | None = None):
+        """Check if a similar exam already exists in generated_questions folder."""
+        try:
+            exam_files = os.listdir(self.paths['generated_exams'])
+            cache_key = self._generate_cache_key(exam_name, stream, year)
+            
+            # Look for files that match our pattern
+            for file_name in exam_files:
+                if file_name.startswith(f"{self.exam_type.lower()}_exam") and file_name.endswith(".json"):
+                    # Load and check if it matches our requirements
+                    file_path = os.path.join(self.paths['generated_exams'], file_name)
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        exam_data = json.load(f)
+                        
+                    exam_details = exam_data.get('exam_details', {})
+                    # Normalize both values, treating None and empty string as equivalent
+                    cached_stream = (exam_details.get('stream') or '').upper()
+                    requested_stream = (stream or '').upper()
+                    
+                    # For CAT, stream might be None, so we need to handle that case
+                    if exam_details.get('name', '').upper() == exam_name.upper():
+                        # If both streams are empty/None, or they match, it's a cache hit
+                        if cached_stream == requested_stream:
+                            if year and exam_details.get('year') == year:
+                                print(f"Found cached exam: {file_name}")
+                                return exam_data
+                        
+        except Exception as e:
+            print(f"Error checking cached exams: {e}")
+        
+        return None
+
     async def generate_full_exam(self, exam_name: str, stream: str | None = None, year: int | None = None):
         """
         Orchestrates the generation of a full mock exam section by section
-        to respect API rate limits.
+        to respect API rate limits. Checks for cached exams first.
         """
+        # Check for cached exam first
+        cached_exam = self._find_cached_exam(exam_name, stream, year)
+        if cached_exam:
+            print("Using cached exam - no AI generation needed!")
+            return cached_exam
+            
+        print("No cached exam found, generating new exam with AI...")
+        
         exam_name_upper = exam_name.upper()
         
         # Validate GATE stream if provided
@@ -351,8 +435,8 @@ class RAGService:
             print(f"--- Section {section.upper()} generation complete. ---")
 
             if i < len(sections_to_process) - 1:
-                print(f"Waiting for 60 seconds to avoid rate limiting...")
-                await asyncio.sleep(60)
+                print(f"Waiting for 1 seconds to avoid rate limiting...")
+                await asyncio.sleep(1)
         
         print("\nFull exam generation complete.")
         self._save_exam(full_exam)

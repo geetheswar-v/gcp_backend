@@ -40,17 +40,60 @@ def create_user(db: Session, user: schema.UserCreate, role: models.UserRole = mo
 
 # --- Exam Attempt CRUD Functions ---
 
+def create_generated_exam(db: Session, user: models.User, exam_type: str, exam_name: str, stream: str | None, year: int | None, exam_data: dict) -> models.GeneratedExam:
+    """Save a newly generated exam for the user."""
+    generated_exam = models.GeneratedExam(
+        user_id=user.id,
+        exam_type=exam_type,
+        exam_name=exam_name,
+        stream=stream,
+        year=year,
+        exam_data=exam_data,
+        generated_at=datetime.datetime.utcnow()
+    )
+    db.add(generated_exam)
+    db.commit()
+    db.refresh(generated_exam)
+    return generated_exam
+
+def get_generated_exams(db: Session, user: models.User, include_attempted: bool = False) -> List[models.GeneratedExam]:
+    """Get all generated exams for a user."""
+    query = db.query(models.GeneratedExam).filter(models.GeneratedExam.user_id == user.id)
+    if not include_attempted:
+        query = query.filter(models.GeneratedExam.is_attempted == False)
+    return query.order_by(models.GeneratedExam.generated_at.desc()).all()
+
+def mark_exam_as_attempted(db: Session, generated_exam_id: int):
+    """Mark a generated exam as attempted."""
+    exam = db.query(models.GeneratedExam).filter(models.GeneratedExam.id == generated_exam_id).first()
+    if exam:
+        exam.is_attempted = True
+        db.commit()
+
 def create_exam_attempt(db: Session, user: models.User, submission: schema.ExamSubmissionRequest) -> models.ExamAttempt:
     attempt = models.ExamAttempt(
         user_id=user.id,
+        generated_exam_id=submission.generated_exam_id,
+        exam_type=submission.exam_type,
         exam_name=submission.exam_name,
         stream=submission.stream,
         year=submission.year,
         score=submission.score,
+        total_questions=submission.total_questions,
+        correct_answers=submission.correct_answers,
+        wrong_answers=submission.wrong_answers,
+        unanswered=submission.unanswered,
+        percentage=int(submission.percentage) if submission.percentage else None,
+        time_taken=submission.time_taken,
         exam_data=submission.exam_data,
         submitted_at=datetime.datetime.utcnow()
     )
     db.add(attempt)
+    
+    # Mark the generated exam as attempted if applicable
+    if submission.generated_exam_id:
+        mark_exam_as_attempted(db, submission.generated_exam_id)
+    
     db.commit()
     db.refresh(attempt)
     return attempt

@@ -1,6 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+import uuid
+import asyncio
 
 # Import all the necessary modules from your application structure
 from . import crud, models, schema, security, payments, database
@@ -20,6 +23,15 @@ app = FastAPI(
     title="CAT/GATE Mock Test Platform API",
     description="An AI-powered platform to generate mock exams with a secure payment and user system.",
     version="1.0.0"
+)
+
+# --- CORS Middleware ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 # --- Initialize the RAG Services ---
@@ -107,36 +119,84 @@ def get_gate_streams():
         "streams": [{"code": code, "name": stream_info.get(code, "Unknown")} for code in GATE_STREAMS]
     }
 
+# --- In-Memory Task Store (for demo purposes) ---
+# In production, use Redis or a database
+exam_tasks = {}
+
+async def run_exam_generation(task_id: str, request: schema.ExamGenerationRequest, user_id: int, db_session):
+    try:
+        print(f"Task {task_id}: Starting generation for user {user_id}")
+        rag_service = RAGService(request.exam_type)
+        generated_exam = await rag_service.generate_full_exam(
+            exam_name=request.exam_type,
+            stream=request.stream,
+            year=request.year
+        )
+        
+        # Save the generated exam to database
+        user = db_session.query(models.User).filter(models.User.id == user_id).first()
+        if user:
+            saved_exam = crud.create_generated_exam(
+                db_session,
+                user,
+                request.exam_type,
+                request.exam_name,
+                request.stream,
+                request.year,
+                generated_exam
+            )
+            exam_tasks[task_id] = {"status": "completed", "result": generated_exam, "exam_id": saved_exam.id}
+        else:
+            exam_tasks[task_id] = {"status": "completed", "result": generated_exam}
+        
+        print(f"Task {task_id}: Completed successfully")
+    except Exception as e:
+        print(f"Task {task_id}: Failed with error: {e}")
+        exam_tasks[task_id] = {"status": "failed", "error": str(e)}
+
 # --- Core Application Endpoint ---
 
 # --- MODIFIED: The endpoint now accepts a request body with parameters ---
 @app.post("/generate-exam", tags=["Exam Generation"])
 async def generate_new_exam(
     request: schema.ExamGenerationRequest,
-    current_user: models.User = Depends(security.get_current_user)
+    background_tasks: BackgroundTasks,
+    current_user: models.User = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db)
 ):
     """
-    Generate a full, new mock exam based on the provided parameters.
-    
-    This is a protected endpoint. The user must provide a valid JWT access token.
-    Supports both CAT and GATE exams with all 30 GATE streams.
+    Start generating a new mock exam in the background.
+    Returns a task_id to poll for status.
     """
-    try:
-        print(f"Generating new {request.exam_name} exam for user: {current_user.email}")
-        
-        # Create appropriate RAG service instance based on exam type
-        rag_service = RAGService(request.exam_name)
-        
-        # Pass the request parameters to the RAG service
-        generated_exam = await rag_service.generate_full_exam(
-            exam_name=request.exam_name,
-            stream=request.stream,
-            year=request.year
-        )
-        return generated_exam
-    except Exception as e:
-        print(f"An error occurred during exam generation: {e}")
-        raise HTTPException(status_code=500, detail="An internal error occurred while generating the exam.")
+    task_id = str(uuid.uuid4())
+    exam_tasks[task_id] = {"status": "processing"}
+    
+    background_tasks.add_task(run_exam_generation, task_id, request, current_user.id, db)
+    
+    return {"task_id": task_id, "status": "processing", "message": "Exam generation started"}
+
+@app.get("/exam-status/{task_id}", tags=["Exam Generation"])
+async def get_exam_status(task_id: str, current_user: models.User = Depends(security.get_current_user)):
+    """
+    Check the status of an exam generation task.
+    """
+    task = exam_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task["status"] == "completed":
+        result = {
+            "status": "completed",
+            "result": task["result"]
+        }
+        # Include exam_id if available
+        if "exam_id" in task:
+            result["exam_id"] = task["exam_id"]
+        return result
+    elif task["status"] == "failed":
+        return {"status": "failed", "error": task.get("error")}
+    else:
+        return {"status": "processing"}
 
 # --- Exam Submission Endpoints ---
 
@@ -149,12 +209,23 @@ def submit_exam(
     attempt = crud.create_exam_attempt(db, current_user, submission)
     return attempt
 
+@app.get("/generated-exams", response_model=list[schema.GeneratedExamResponse], tags=["Exam Generation"])
+def get_generated_exams(
+    current_user: models.User = Depends(security.get_current_user),
+    db: Session = Depends(database.get_db),
+    include_attempted: bool = False
+):
+    """Get all exams generated by the user (available exams)."""
+    exams = crud.get_generated_exams(db, current_user, include_attempted=include_attempted)
+    return exams
+
 @app.get("/exam-history", response_model=list[schema.ExamAttemptResponse], tags=["Exam Submission"])
 def get_exam_history(
     current_user: models.User = Depends(security.get_current_user),
     db: Session = Depends(database.get_db),
     limit: int = 20
 ):
+    """Get all completed exam attempts with detailed statistics."""
     attempts = crud.get_exam_attempts(db, current_user, limit=limit)
     return attempts
 

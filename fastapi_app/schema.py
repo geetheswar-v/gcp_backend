@@ -51,19 +51,48 @@ class TokenData(BaseModel):
 
 # --- Exam Submission Schemas ---
 
+class GeneratedExamResponse(BaseModel):
+    """Response for a generated exam that hasn't been attempted yet."""
+    id: int
+    exam_type: str
+    exam_name: str
+    stream: str | None
+    year: int | None
+    generated_at: datetime
+    exam_data: dict
+    is_attempted: bool
+
+    class Config:
+        from_attributes = True
+
 class ExamSubmissionRequest(BaseModel):
+    generated_exam_id: int | None = None
+    exam_type: str
     exam_name: str
     stream: str | None = None
     year: int | None = None
     score: int | None = None
+    total_questions: int
+    correct_answers: int
+    wrong_answers: int
+    unanswered: int
+    percentage: float | None = None
+    time_taken: int | None = None
     exam_data: dict
 
 class ExamAttemptResponse(BaseModel):
     id: int
+    exam_type: str
     exam_name: str
     stream: str | None
     year: int | None
     score: int | None
+    total_questions: int
+    correct_answers: int
+    wrong_answers: int
+    unanswered: int
+    percentage: int | None
+    time_taken: int | None
     submitted_at: datetime | None
     exam_data: dict
 
@@ -77,7 +106,8 @@ class ExamGenerationRequest(BaseModel):
     Supports both CAT and GATE exams.
     For GATE exams, stream is required and must be one of the 30 valid streams.
     """
-    exam_name: str = "CAT"  # CAT or GATE
+    exam_type: str  # CAT or GATE (the type of exam)
+    exam_name: str  # Custom name like "cs_exam_2024" or "my_cat_practice"
     stream: str | None = None  # Required for GATE exams (CS, EE, ME, etc.)
     year: int | None = None
     
